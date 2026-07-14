@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>用户洞察训练工具</title>
+<style>
+:root{--bg:#0f0f0f;--surface:#1a1a1a;--surface2:#242424;--border:#2e2e2e;--accent:#4f8ef7;--accent-dim:#1e3a6e;--text:#e8e8e8;--text-dim:#888;--text-mute:#555;--success:#3ecf8e;--warn:#f59e0b;--danger:#ef4444;--radius:10px;--radius-sm:6px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',sans-serif;min-height:100vh;padding-bottom:80px}
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:52px}
+.nav-title{font-size:16px;font-weight:600}
+.nav-sync{font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:6px;cursor:pointer}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--success)}
+.sync-dot.syncing{background:var(--warn);animation:pulse 1s infinite}
+.sync-dot.error{background:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.tabs{position:fixed;bottom:0;left:0;right:0;z-index:100;background:var(--surface);border-top:1px solid var(--border);display:flex}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 0;gap:4px;font-size:11px;color:var(--text-dim);cursor:pointer;transition:color .2s;position:relative}
+.tab.active{color:var(--accent)}
+.tab svg{width:22px;height:22px}
+.badge{position:absolute;top:6px;right:calc(50% - 18px);background:var(--danger);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+.page{display:none;padding:72px 20px 20px}
+.page.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.card-title{font-size:13px;color:var(--text-dim);margin-bottom:10px;font-weight:500}
+textarea,input[type=text],input[type=password]{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:15px;padding:12px;outline:none;resize:none;font-family:inherit;line-height:1.6;transition:border-color .2s}
+textarea:focus,input:focus{border-color:var(--accent)}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.tag{padding:6px 14px;border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface2);color:var(--text-dim);border:1px solid var(--border);transition:all .15s;user-select:none}
+.tag.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent)}
+.tag.locked{pointer-events:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 20px;border-radius:var(--radius-sm);font-size:15px;font-weight:600;cursor:pointer;border:none;transition:all .15s;gap:6px;width:100%}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#3a7de6}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn:disabled{opacity:.4;pointer-events:none}
+.steps{display:flex;align-items:center;margin-bottom:20px}
+.step-item{flex:1;text-align:center;font-size:12px;color:var(--text-mute);position:relative}
+.step-item.active{color:var(--accent)}
+.step-item.done{color:var(--success)}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin:0 auto 4px;transition:all .2s}
+.step-item.active .step-num{border-color:var(--accent);color:var(--accent)}
+.step-item.done .step-num{background:var(--success);border-color:var(--success);color:#fff}
+.step-line{position:absolute;top:14px;left:50%;right:-50%;height:2px;background:var(--border);z-index:-1}
+.step-item:last-child .step-line{display:none}
+.step-item.done .step-line{background:var(--success)}
+.source-btns{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.source-btn{padding:6px 14px;border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface2);color:var(--text-dim);border:1px solid var(--border);transition:all .15s}
+.source-btn.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent)}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.compare-col-title{font-size:12px;color:var(--text-dim);margin-bottom:8px;font-weight:600}
+.compare-box{background:var(--surface2);border-radius:var(--radius-sm);padding:12px;font-size:13px;line-height:1.6;min-height:100px}
+.compare-box.mine{border-left:3px solid var(--accent)}
+.compare-box.ai{border-left:3px solid var(--success)}
+.compare-box .label{font-size:11px;color:var(--text-dim);margin-bottom:4px}
+.compare-box p{margin-bottom:8px}
+.history-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .15s}
+.history-item:hover{border-color:var(--accent)}
+.history-meta{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.history-date{font-size:12px;color:var(--text-dim)}
+.history-source{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-dim)}
+.history-quote{font-size:14px;line-height:1.5;color:var(--text);margin-bottom:8px}
+.history-tags{display:flex;flex-wrap:wrap;gap:6px}
+.history-tag{font-size:11px;padding:3px 10px;border-radius:10px;background:var(--accent-dim);color:var(--accent)}
+.review-badge{font-size:11px;padding:3px 10px;border-radius:10px;background:#2a1a1a;color:var(--warn);margin-left:auto}
+.review-done-badge{font-size:11px;padding:3px 10px;border-radius:10px;background:#0f2a1a;color:var(--success);margin-left:auto}
+.review-header{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.review-quote{font-size:16px;line-height:1.7;color:var(--text);padding:12px;background:var(--surface2);border-radius:var(--radius-sm);border-left:3px solid var(--warn)}
+.review-round{font-size:12px;color:var(--text-dim);margin-bottom:8px}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center}
+.stat-num{font-size:28px;font-weight:700;color:var(--accent)}
+.stat-label{font-size:12px;color:var(--text-dim);margin-top:4px}
+.pie-container{position:relative;width:140px;height:140px;margin:0 auto 16px}
+.pie-legend{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.pie-legend-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-dim)}
+.pie-dot{width:8px;height:8px;border-radius:50%}
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--surface2);color:var(--text);padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;border:1px solid var(--border);white-space:nowrap}
+.toast.show{opacity:1}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:flex-end}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-height:90vh;overflow-y:auto;padding:20px}
+.modal-title{font-size:17px;font-weight:600;margin-bottom:16px}
+.modal-close{float:right;color:var(--text-dim);cursor:pointer;font-size:20px}
+.section-title{font-size:13px;color:var(--text-dim);font-weight:600;margin:16px 0 10px;text-transform:uppercase;letter-spacing:.5px}
+.empty{text-align:center;color:var(--text-mute);padding:40px 20px;font-size:14px;line-height:1.8}
+.divider{height:1px;background:var(--border);margin:16px 0}
+.gap{height:12px}
+</style>
+</head>
+<body>
+<div class="nav">
+  <div class="nav-title">用户洞察训练</div>
+  <div class="nav-sync" onclick="manualSync()">
+    <div class="sync-dot" id="syncDot"></div>
+    <span id="syncText">未配置</span>
+  </div>
+</div>
+
+<div class="page active" id="page-input">
+  <div class="section-title">新增原话</div>
+  <div class="card">
+    <div class="card-title">来源</div>
+    <div class="source-btns" id="sourceBtns">
+      <div class="source-btn active" data-val="评论">评论</div>
+      <div class="source-btn" data-val="运营反馈">运营反馈</div>
+      <div class="source-btn" data-val="建联">建联</div>
+      <div class="source-btn" data-val="其他">其他</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">用户原话</div>
+    <textarea id="inputQuote" rows="5" placeholder="粘贴用户说的原话…"></textarea>
+  </div>
+  <button class="btn btn-primary" onclick="startAnalysis()">开始分析 →</button>
+</div>
+
+<div class="page" id="page-analysis">
+  <div class="steps" id="stepsBar"></div>
+  <div id="analysisContent"></div>
+  <div class="gap"></div>
+  <button class="btn btn-primary" id="analysisNextBtn" onclick="analysisNext()">下一步</button>
+</div>
+
+<div class="page" id="page-compare">
+  <div class="section-title">对比判断</div>
+  <div class="card" id="compareQuoteCard"></div>
+  <div class="compare-grid" id="compareGrid"></div>
+  <div class="card">
+    <div class="card-title">差异备注（可选）</div>
+    <textarea id="diffNote" rows="2" placeholder="记录这次对比的收获或疑问…"></textarea>
+  </div>
+  <button class="btn btn-primary" onclick="saveRecord()">保存入库 ✓</button>
+</div>
+
+<div class="page" id="page-review">
+  <div id="reviewContent"></div>
+</div>
+
+<div class="page" id="page-history">
+  <div id="statsSection"></div>
+  <div class="section-title">全部记录</div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap" id="filterTags"></div>
+  <div id="historyList"></div>
+</div>
+
+<div class="page" id="page-settings">
+  <div class="section-title">GitHub 同步设置</div>
+  <div class="card">
+    <div class="card-title">Personal Access Token</div>
+    <input type="password" id="ghToken" placeholder="ghp_xxxxx…">
+    <div style="font-size:12px;color:var(--text-dim);margin-top:8px">Token 只存在本地浏览器，不进入代码仓库</div>
+  </div>
+  <div class="card">
+    <div class="card-title">仓库 / 文件路径</div>
+    <input type="text" id="ghRepo" placeholder="例：axekevin/user-insight-tool" style="margin-bottom:8px">
+    <input type="text" id="ghFile" placeholder="数据文件路径，例：data/records.json">
+  </div>
+  <button class="btn btn-primary" onclick="saveSettings()" style="margin-bottom:10px">保存设置</button>
+  <button class="btn btn-secondary" onclick="testSync()" style="margin-bottom:20px">测试连接</button>
+  <div class="divider"></div>
+  <div class="section-title">数据管理</div>
+  <div style="display:flex;gap:10px">
+    <button class="btn btn-secondary" onclick="exportData()" style="flex:1">导出 JSON</button>
+    <button class="btn btn-secondary" onclick="importDataPrompt()" style="flex:1">导入 JSON</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-page="input" onclick="switchTab('input')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新增
+  </div>
+  <div class="tab" data-page="review" onclick="switchTab('review')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>复习
+    <div class="badge" id="reviewBadge" style="display:none"></div>
+  </div>
+  <div class="tab" data-page="history" onclick="switchTab('history')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>历史库
+  </div>
+  <div class="tab" data-page="settings" onclick="switchTab('settings')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>设置
+  </div>
+</div>
+
+<div class="modal-overlay" id="detailModal" onclick="closeModal('detailModal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">记录详情 <span class="modal-close" onclick="closeModal('detailModal')">×</span></div>
+    <div id="detailContent"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TAGS_LIST=['炫耀/身份感','关系维护','归属感','仪式感','娱乐/消磨','其他'];
+const REVIEW_INTERVALS=[1,2,4,7,15,30];
+const TAG_COLORS=['#4f8ef7','#3ecf8e','#f59e0b','#a78bfa','#f472b6','#64748b'];
+const CACHE_KEY='ui_records',SETTINGS_KEY='ui_settings';
+let records=[],currentDraft={},analysisStep=0,currentSource='评论';
+
+async function init(){
+  loadSettings();
+  records=loadLocalRecords();
+  renderReviewBadge();renderHistory();renderReview();
+  await syncFromGitHub();
+}
+function loadLocalRecords(){try{return JSON.parse(localStorage.getItem(CACHE_KEY)||'[]')}catch{return[]}}
+function saveLocalRecords(){localStorage.setItem(CACHE_KEY,JSON.stringify(records))}
+function loadSettings(){
+  try{
+    const s=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}');
+    if(s.token)document.getElementById('ghToken').value=s.token;
+    document.getElementById('ghRepo').value=s.repo||'axekevin/user-insight-tool';
+    document.getElementById('ghFile').value=s.file||'data/records.json';
+  }catch{}
+}
+function saveSettings(){
+  const s={token:document.getElementById('ghToken').value.trim(),repo:document.getElementById('ghRepo').value.trim(),file:document.getElementById('ghFile').value.trim()};
+  localStorage.setItem(SETTINGS_KEY,JSON.stringify(s));
+  showToast('设置已保存');
+}
+function getSettings(){try{return JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')}catch{return{}}}
+
+async function syncFromGitHub(){
+  const s=getSettings();
+  if(!s.token||!s.repo||!s.file){setSyncState('mute','未配置');return}
+  setSyncState('syncing','同步中…');
+  try{
+    const res=await fetch(`https://api.github.com/repos/${s.repo}/contents/${s.file}`,{headers:{Authorization:`token ${s.token}`,Accept:'application/vnd.github.v3+json'}});
+    if(res.status===404){setSyncState('ok','已同步');return}
+    if(!res.ok)throw new Error(res.status);
+    const data=await res.json();
+    const remote=JSON.parse(atob(data.content.replace(/\n/g,'')));
+    const remoteMap={};
+    remote.forEach(r=>remoteMap[r.id]=r);
+    records.forEach(r=>{if(!remoteMap[r.id])remoteMap[r.id]=r});
+    records=Object.values(remoteMap).sort((a,b)=>b.createdAt-a.createdAt);
+    saveLocalRecords();renderReviewBadge();renderHistory();renderReview();
+    setSyncState('ok','已同步');
+  }catch{setSyncState('error','同步失败')}
+}
+async function pushToGitHub(){
+  const s=getSettings();
+  if(!s.token||!s.repo||!s.file)return;
+  setSyncState('syncing','保存中…');
+  try{
+    let sha=null;
+    const res=await fetch(`https://api.github.com/repos/${s.repo}/contents/${s.file}`,{headers:{Authorization:`token ${s.token}`,Accept:'application/vnd.github.v3+json'}});
+    if(res.ok){const d=await res.json();sha=d.sha}
+    const body={message:`update ${new Date().toISOString()}`,content:btoa(unescape(encodeURIComponent(JSON.stringify(records,null,2))))};
+    if(sha)body.sha=sha;
+    const put=await fetch(`https://api.github.com/repos/${s.repo}/contents/${s.file}`,{method:'PUT',headers:{Authorization:`token ${s.token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!put.ok)throw new Error(put.status);
+    setSyncState('ok','已同步');
+  }catch{setSyncState('error','同步失败')}
+}
+function manualSync(){syncFromGitHub()}
+async function testSync(){saveSettings();await syncFromGitHub();showToast('测试完成，查看顶部同步状态')}
+function setSyncState(state,text){
+  const dot=document.getElementById('syncDot');
+  dot.className='sync-dot'+(state==='syncing'?' syncing':state==='error'?' error':'');
+  document.getElementById('syncText').textContent=text;
+}
+
+document.getElementById('sourceBtns').addEventListener('click',e=>{
+  if(!e.target.dataset.val)return;
+  currentSource=e.target.dataset.val;
+  document.querySelectorAll('.source-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===currentSource));
+});
+
+function startAnalysis(){
+  const quote=document.getElementById('inputQuote').value.trim();
+  if(!quote){showToast('请先填写用户原话');return}
+  currentDraft={quote,source:currentSource,mySteps:[{},{},{}],aiText:'',diffNote:''};
+  analysisStep=0;renderAnalysis();switchTab('analysis');
+}
+
+const stepConfig=[
+  {title:'表层：这个人在说什么？',placeholder:'用1-2句话描述这句话的字面意思…',field:'surface'},
+  {title:'动机：他为什么这么说？',placeholder:'推测他说这句话背后的真实需求或情绪…',field:'motive'},
+  {title:'打标签：最接近哪种动机？',placeholder:null,field:'tags'},
+];
+
+function renderAnalysis(){
+  let html='';
+  stepConfig.forEach((s,i)=>{
+    const cls=i<analysisStep?'done':i===analysisStep?'active':'';
+    html+=`<div class="step-item ${cls}"><div class="step-num">${i<analysisStep?'✓':i+1}</div><div>${['表层','动机','标签'][i]}</div><div class="step-line"></div></div>`;
+  });
+  document.getElementById('stepsBar').innerHTML=html;
+  const step=stepConfig[analysisStep];
+  let content=`<div class="card"><div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">用户原话</div><div style="font-size:15px;line-height:1.7;padding:10px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--accent)">${escHtml(currentDraft.quote)}</div></div><div class="card"><div class="card-title">${step.title}</div>`;
+  if(step.field==='tags'){
+    content+=`<div style="font-size:13px;color:var(--text-dim);margin-bottom:10px">可多选</div><div class="tags" id="tagPicker">`;
+    TAGS_LIST.forEach(t=>{const active=(currentDraft.mySteps[2].tags||[]).includes(t)?'active':'';content+=`<div class="tag ${active}" onclick="toggleTag('${t}')">${t}</div>`;});
+    content+=`</div>`;
+  }else{
+    const val=currentDraft.mySteps[analysisStep][step.field]||'';
+    content+=`<textarea id="stepInput" rows="4" placeholder="${step.placeholder}">${val}</textarea>`;
+  }
+  content+=`</div>`;
+  if(analysisStep>0){
+    content+=`<div class="section-title">已完成的判断</div>`;
+    for(let i=0;i<analysisStep;i++){
+      const s=stepConfig[i];
+      const val=s.field==='tags'?(currentDraft.mySteps[i].tags||[]).join('、'):currentDraft.mySteps[i][s.field]||'';
+      content+=`<div class="card"><div class="card-title" style="color:var(--success)">✓ ${['表层','动机','标签'][i]}</div><div style="font-size:14px;color:var(--text-dim);line-height:1.6">${escHtml(val)}</div></div>`;
+    }
+  }
+  document.getElementById('analysisContent').innerHTML=content;
+  document.getElementById('analysisNextBtn').textContent=analysisStep<2?'下一步 →':'完成我的判断 →';
+}
+
+function toggleTag(tag){
+  let tags=currentDraft.mySteps[2].tags||[];
+  tags=tags.includes(tag)?tags.filter(t=>t!==tag):[...tags,tag];
+  currentDraft.mySteps[2].tags=tags;
+  document.querySelectorAll('#tagPicker .tag').forEach(el=>el.classList.toggle('active',tags.includes(el.textContent)));
+}
+
+function analysisNext(){
+  const step=stepConfig[analysisStep];
+  if(step.field!=='tags'){
+    const val=document.getElementById('stepInput').value.trim();
+    if(!val){showToast('请填写后再继续');return}
+    currentDraft.mySteps[analysisStep][step.field]=val;
+  }else{
+    if(!(currentDraft.mySteps[2].tags||[]).length){showToast('请至少选一个标签');return}
+  }
+  if(analysisStep<2){analysisStep++;renderAnalysis();}
+  else{renderCompare();switchTab('compare');}
+}
+
+function renderCompare(){
+  document.getElementById('compareQuoteCard').innerHTML=`<div class="card-title">用户原话</div><div style="font-size:15px;line-height:1.7;border-left:3px solid var(--accent);padding-left:10px">${escHtml(currentDraft.quote)}</div>`;
+  const m=currentDraft.mySteps;
+  document.getElementById('compareGrid').innerHTML=`
+    <div><div class="compare-col-title">🔒 我的判断</div><div class="compare-box mine"><div class="label">表层</div><p>${escHtml(m[0].surface||'')}</p><div class="label">动机</div><p>${escHtml(m[1].motive||'')}</p><div class="label">标签</div><p>${(m[2].tags||[]).map(t=>`<span style="color:var(--accent)">${t}</span>`).join(' ')}</p></div></div>
+    <div><div class="compare-col-title">🤖 AI 判断</div><textarea id="aiInput" rows="9" placeholder="把 AI 分析结果粘贴到这里…" style="height:190px;font-size:13px"></textarea></div>`;
+}
+
+function saveRecord(){
+  const aiText=document.getElementById('aiInput').value.trim();
+  const diffNote=document.getElementById('diffNote').value.trim();
+  const now=Date.now();
+  const record={id:'r_'+now,quote:currentDraft.quote,source:currentDraft.source,mySteps:currentDraft.mySteps,aiText,diffNote,createdAt:now,reviewSchedule:REVIEW_INTERVALS.map((days,i)=>({round:i+1,dueAt:now+days*86400000,done:false,feeling:null}))};
+  records.unshift(record);saveLocalRecords();pushToGitHub();
+  renderReviewBadge();renderHistory();
+  document.getElementById('inputQuote').value='';currentDraft={};
+  showToast('已保存入库 ✓');switchTab('input');
+}
+
+function getDueReviews(){
+  const now=Date.now(),due=[];
+  records.forEach(r=>{const p=r.reviewSchedule.find(s=>!s.done&&s.dueAt<=now);if(p)due.push({record:r,schedule:p})});
+  return due;
+}
+function renderReviewBadge(){const n=getDueReviews().length;const b=document.getElementById('reviewBadge');b.style.display=n?'flex':'none';b.textContent=n>9?'9+':n}
+
+let reviewQueue=[],reviewIdx=0,reviewStage='thinking',reviewDraft={},selectedFeeling=null;
+
+function renderReview(){
+  const due=getDueReviews();renderReviewBadge();
+  if(!due.length){
+    const done=records.filter(r=>r.reviewSchedule.every(s=>s.done)).length;
+    document.getElementById('reviewContent').innerHTML=`<div class="empty">🎉 今日无待复习内容<br><br>系统将按艾宾浩斯曲线（1/2/4/7/15/30天）提醒你</div>${records.length?`<div class="card" style="margin-top:20px"><div class="card-title">整体进度</div><div style="display:flex;align-items:center;gap:10px"><div style="flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="width:${Math.round(done/records.length*100)}%;height:100%;background:var(--success);border-radius:3px"></div></div><span style="font-size:13px;color:var(--text-dim)">${done}/${records.length} 已掌握</span></div></div>`:''}`;
+    return;
+  }
+  reviewQueue=due;reviewIdx=0;renderReviewItem();
+}
+
+function renderReviewItem(){
+  if(reviewIdx>=reviewQueue.length){renderReview();return}
+  const{record,schedule}=reviewQueue[reviewIdx];
+  reviewStage='thinking';reviewDraft={};selectedFeeling=null;
+  document.getElementById('reviewContent').innerHTML=`<div class="review-header"><div class="review-round">第 ${schedule.round}/${REVIEW_INTERVALS.length} 轮复习 · 距录入 ${Math.round((Date.now()-record.createdAt)/86400000)} 天</div><div class="review-quote">${escHtml(record.quote)}</div><div style="margin-top:8px;font-size:12px;color:var(--text-dim)">来源：${record.source}</div></div><div id="reviewSteps"></div>`;
+  renderReviewSteps();
+}
+
+function renderReviewSteps(){
+  let html='';
+  if(reviewStage==='thinking'){
+    html=`<div class="section-title">重新分析（不能看之前的判断）</div>
+    <div class="card"><div class="card-title">表层：这个人在说什么？</div><textarea id="rv_surface" rows="2" placeholder="1-2句话描述…"></textarea></div>
+    <div class="card"><div class="card-title">动机：他为什么这么说？</div><textarea id="rv_motive" rows="2" placeholder="推测动机…"></textarea></div>
+    <div class="card"><div class="card-title">打标签</div><div class="tags" id="rvTagPicker">${TAGS_LIST.map(t=>`<div class="tag" onclick="toggleRvTag('${t}')">${t}</div>`).join('')}</div></div>
+    <button class="btn btn-primary" onclick="revealReview()">揭晓当时的判断 →</button>`;
+  }else{
+    const{record}=reviewQueue[reviewIdx];const m=record.mySteps;
+    html=`<div class="compare-grid">
+      <div><div class="compare-col-title">📝 这次判断</div><div class="compare-box mine" style="font-size:13px"><div class="label">表层</div><p>${escHtml(reviewDraft.surface||'')}</p><div class="label">动机</div><p>${escHtml(reviewDraft.motive||'')}</p><div class="label">标签</div><p>${(reviewDraft.tags||[]).map(t=>`<span style="color:var(--accent)">${t}</span>`).join(' ')}</p></div></div>
+      <div><div class="compare-col-title">🔒 当时判断</div><div class="compare-box ai" style="font-size:13px"><div class="label">表层</div><p>${escHtml(m[0].surface||'')}</p><div class="label">动机</div><p>${escHtml(m[1].motive||'')}</p><div class="label">标签</div><p>${(m[2].tags||[]).map(t=>`<span style="color:var(--success)">${t}</span>`).join(' ')}</p></div></div>
+    </div>
+    ${record.aiText?`<div class="card"><div class="card-title">当时的 AI 判断</div><div style="font-size:13px;color:var(--text-dim);line-height:1.6">${escHtml(record.aiText)}</div></div>`:''}
+    <div class="card"><div class="card-title">这次复习的感受</div><div class="tags" id="rvFeeling"><div class="tag" onclick="selectFeeling(this,'更清晰了')">更清晰了 ✓</div><div class="tag" onclick="selectFeeling(this,'还是模糊')">还是模糊</div><div class="tag" onclick="selectFeeling(this,'有新理解')">有新理解 💡</div></div></div>
+    <button class="btn btn-primary" id="rvDoneBtn" onclick="doneReview()" disabled>完成这条 →</button>
+    <div class="gap"></div>
+    <button class="btn btn-secondary" onclick="skipReview()">跳过</button>`;
+  }
+  document.getElementById('reviewSteps').innerHTML=html;
+}
+function toggleRvTag(tag){if(!reviewDraft.tags)reviewDraft.tags=[];reviewDraft.tags=reviewDraft.tags.includes(tag)?reviewDraft.tags.filter(t=>t!==tag):[...reviewDraft.tags,tag];document.querySelectorAll('#rvTagPicker .tag').forEach(el=>el.classList.toggle('active',reviewDraft.tags.includes(el.textContent)))}
+function revealReview(){const s=document.getElementById('rv_surface').value.trim(),m=document.getElementById('rv_motive').value.trim();if(!s||!m){showToast('请填写表层和动机');return}if(!(reviewDraft.tags||[]).length){showToast('请至少选一个标签');return}reviewDraft.surface=s;reviewDraft.motive=m;reviewStage='compare';renderReviewSteps()}
+function selectFeeling(el,val){selectedFeeling=val;document.querySelectorAll('#rvFeeling .tag').forEach(t=>t.classList.remove('active'));el.classList.add('active');document.getElementById('rvDoneBtn').disabled=false}
+function doneReview(){const{record,schedule}=reviewQueue[reviewIdx];const idx=record.reviewSchedule.findIndex(s=>s.round===schedule.round);record.reviewSchedule[idx].done=true;record.reviewSchedule[idx].doneAt=Date.now();record.reviewSchedule[idx].feeling=selectedFeeling;saveLocalRecords();pushToGitHub();showToast('✓ 已完成');reviewIdx++;renderReviewItem()}
+function skipReview(){reviewIdx++;renderReviewItem()}
+
+let historyFilter=null;
+function renderHistory(){
+  const total=records.length,done=records.filter(r=>r.reviewSchedule.every(s=>s.done)).length,due=getDueReviews().length;
+  const tagCount={};records.forEach(r=>(r.mySteps[2].tags||[]).forEach(t=>tagCount[t]=(tagCount[t]||0)+1));
+  let statsHtml=`<div class="stats-grid"><div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">总原话数</div></div><div class="stat-card"><div class="stat-num" style="color:var(--warn)">${due}</div><div class="stat-label">待复习</div></div><div class="stat-card"><div class="stat-num" style="color:var(--success)">${done}</div><div class="stat-label">已掌握</div></div><div class="stat-card"><div class="stat-num">${Object.keys(tagCount).length}</div><div class="stat-label">动机类型</div></div></div>`;
+  if(Object.keys(tagCount).length){
+    const entries=Object.entries(tagCount).sort((a,b)=>b[1]-a[1]);const tot=Object.values(tagCount).reduce((a,b)=>a+b,0);let paths='',cAng=-90;
+    entries.forEach(([tag,count],i)=>{const ang=(count/tot)*360,r1=cAng*Math.PI/180,r2=(cAng+ang)*Math.PI/180,x1=70+60*Math.cos(r1),y1=70+60*Math.sin(r1),x2=70+60*Math.cos(r2),y2=70+60*Math.sin(r2),lg=ang>180?1:0;paths+=`<path d="M70,70 L${x1},${y1} A60,60 0 ${lg},1 ${x2},${y2} Z" fill="${TAG_COLORS[i%TAG_COLORS.length]}"/>`;cAng+=ang});
+    const legend=entries.map(([t,c],i)=>`<div class="pie-legend-item"><div class="pie-dot" style="background:${TAG_COLORS[i%TAG_COLORS.length]}"></div>${t}(${c})</div>`).join('');
+    statsHtml+=`<div class="card"><div class="card-title">动机分布</div><div class="pie-container"><svg viewBox="0 0 140 140" width="140" height="140">${paths}</svg></div><div class="pie-legend">${legend}</div></div>`;
+  }
+  document.getElementById('statsSection').innerHTML=statsHtml;
+  const allTags=[...new Set(records.flatMap(r=>r.mySteps[2].tags||[]))];
+  document.getElementById('filterTags').innerHTML=`<div class="tag ${!historyFilter?'active':''}" onclick="setFilter(null)">全部</div>${allTags.map(t=>`<div class="tag ${historyFilter===t?'active':''}" onclick="setFilter('${t}')">${t}</div>`).join('')}`;
+  const filtered=historyFilter?records.filter(r=>(r.mySteps[2].tags||[]).includes(historyFilter)):records;
+  if(!filtered.length){document.getElementById('historyList').innerHTML=`<div class="empty">还没有记录<br>去「新增」添加第一条用户原话</div>`;return}
+  document.getElementById('historyList').innerHTML=filtered.map(r=>{
+    const due=r.reviewSchedule.find(s=>!s.done&&s.dueAt<=Date.now());const allDone=r.reviewSchedule.every(s=>s.done);
+    const badge=allDone?`<div class="review-done-badge">已掌握</div>`:due?`<div class="review-badge">待复习</div>`:'';
+    return `<div class="history-item" onclick="showDetail('${r.id}')"><div class="history-meta"><div class="history-date">${fmtDate(r.createdAt)}</div><div class="history-source">${r.source}</div>${badge}</div><div class="history-quote">${escHtml(r.quote.length>80?r.quote.slice(0,80)+'…':r.quote)}</div><div class="history-tags">${(r.mySteps[2].tags||[]).map(t=>`<div class="history-tag">${t}</div>`).join('')}</div></div>`;
+  }).join('');
+}
+function setFilter(tag){historyFilter=tag;renderHistory()}
+
+function showDetail(id){
+  const r=records.find(x=>x.id===id);if(!r)return;
+  const m=r.mySteps;
+  const progress=r.reviewSchedule.map((s,i)=>{const cls=s.done?'style="color:var(--success)"':s.dueAt<=Date.now()?'style="color:var(--warn)"':'';return `<span ${cls}>第${i+1}轮${s.done?'✓':s.dueAt<=Date.now()?'⚡':'○'}</span>`}).join(' ');
+  document.getElementById('detailContent').innerHTML=`<div style="font-size:16px;line-height:1.7;padding:12px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--accent);margin-bottom:14px">${escHtml(r.quote)}</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px">${r.source} · ${fmtDate(r.createdAt)}</div><div class="section-title">我的判断</div><div class="card"><div class="card-title">表层</div><p style="font-size:14px;line-height:1.6">${escHtml(m[0].surface||'')}</p><div class="divider"></div><div class="card-title">动机</div><p style="font-size:14px;line-height:1.6">${escHtml(m[1].motive||'')}</p><div class="divider"></div><div class="card-title">标签</div><div class="tags" style="margin-top:0">${(m[2].tags||[]).map(t=>`<div class="tag active locked">${t}</div>`).join('')}</div></div>${r.aiText?`<div class="section-title">AI 判断</div><div class="card"><p style="font-size:14px;line-height:1.6;color:var(--text-dim)">${escHtml(r.aiText)}</p></div>`:''}${r.diffNote?`<div class="section-title">差异备注</div><div class="card"><p style="font-size:14px;line-height:1.6">${escHtml(r.diffNote)}</p></div>`:''}<div class="section-title">复习进度</div><div class="card"><p style="font-size:13px;color:var(--text-dim);line-height:2">${progress}</p></div>`;
+  openModal('detailModal');
+}
+
+function switchTab(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  const page=document.getElementById('page-'+name);if(page)page.classList.add('active');
+  const tab=document.querySelector(`.tab[data-page="${name}"]`);if(tab)tab.classList.add('active');
+  if(name==='history')renderHistory();
+  if(name==='review')renderReview();
+  if(name==='settings')loadSettings();
+}
+function openModal(id){document.getElementById(id).classList.add('show')}
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+function exportData(){const blob=new Blob([JSON.stringify(records,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`user-insight-${fmtDate(Date.now())}.json`;a.click()}
+function importDataPrompt(){const input=document.createElement('input');input.type='file';input.accept='.json';input.onchange=e=>{const file=e.target.files[0];const reader=new FileReader();reader.onload=ev=>{try{const imported=JSON.parse(ev.target.result);const existIds=new Set(records.map(r=>r.id));imported.forEach(r=>{if(!existIds.has(r.id))records.push(r)});records.sort((a,b)=>b.createdAt-a.createdAt);saveLocalRecords();pushToGitHub();renderReviewBadge();renderHistory();showToast(`导入完成，共 ${imported.length} 条`)}catch{showToast('文件格式有误')}};reader.readAsText(file)};input.click()}
+function showToast(msg,dur=2000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur)}
+function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}
+function fmtDate(ts){const d=new Date(ts);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+
+init();
+</script>
+</body>
+</html>
