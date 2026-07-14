@@ -454,8 +454,34 @@ function renderCompare(){
   const m=currentDraft.mySteps;
   document.getElementById('compareGrid').innerHTML=`
     <div><div class="compare-col-title">🔒 我的判断</div><div class="compare-box mine"><div class="label">表层</div><p>${escHtml(m[0].surface||'')}</p><div class="label">动机</div><p>${escHtml(m[1].motive||'')}</p><div class="label">标签</div><p>${(m[2].tags||[]).map(t=>`<span style="color:var(--accent)">${t}</span>`).join(' ')}</p></div></div>
-    <div><div class="compare-col-title">🤖 AI 判断</div><div id="aiBox" class="compare-box ai" style="font-size:13px;min-height:190px;line-height:1.7"><span style="color:var(--text-mute)">AI 分析中…</span></div></div>`;
-  callLLM();
+    <div>
+      <div class="compare-col-title">🤖 AI 判断</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary" style="flex:1;padding:7px 10px;font-size:12px" onclick="callLLM()">自动分析</button>
+        <button class="btn btn-secondary" style="flex:1;padding:7px 10px;font-size:12px" onclick="copyPrompt()">📋 复制提问</button>
+      </div>
+      <div id="aiBox" class="compare-box ai" style="font-size:13px;min-height:160px;line-height:1.7"><span style="color:var(--text-mute)">点击「自动分析」调用 LLM，<br>或「复制提问」发给 MyFlicker</span></div>
+      <textarea id="aiPaste" rows="3" placeholder="粘贴 MyFlicker 回复结果…" style="margin-top:8px;font-size:13px" oninput="syncAiPaste()"></textarea>
+    </div>`;
+}
+
+function copyPrompt(){
+  const q=currentDraft.quote||'';
+  const tr=currentDraft._translation?`\n译文：${currentDraft._translation}`:'';
+  const text=`分析这条用户原话的动机：\n\n「${q}」${tr}\n\n请按以下格式输出：\n【表层】这句话字面上在说什么（1-2句）\n【动机】他为什么这么说，背后的真实需求或情绪是什么\n【标签】从以下选项中选择最匹配的（可多选）：炫耀/身份感、关系维护、归属感、仪式感、娱乐/消磨、其他`;
+  navigator.clipboard.writeText(text).then(()=>{
+    showToast('✓ 已复制，粘贴到 MyFlicker 发送');
+  }).catch(()=>{
+    const box=document.getElementById('aiBox');
+    box.innerHTML=`<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">复制失败，请手动复制：</div><textarea style="font-size:12px;width:100%;height:120px">${escHtml(text)}</textarea>`;
+  });
+}
+
+function syncAiPaste(){
+  const val=document.getElementById('aiPaste').value.trim();
+  if(!val)return;
+  currentDraft._aiResult=val;
+  document.getElementById('aiBox').innerHTML=escHtml(val).replace(/【(.*?)】/g,'<strong style="color:var(--accent)">【$1】</strong>');
 }
 
 async function callLLM(){
