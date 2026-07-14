@@ -50,6 +50,7 @@ textarea:focus,input:focus{border-color:var(--accent)}
 .source-btn{padding:6px 14px;border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface2);color:var(--text-dim);border:1px solid var(--border);transition:all .15s}
 .source-btn.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent)}
 .compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+@media(max-width:520px){.compare-grid{grid-template-columns:1fr}}
 .compare-col-title{font-size:12px;color:var(--text-dim);margin-bottom:8px;font-weight:600}
 .compare-box{background:var(--surface2);border-radius:var(--radius-sm);padding:12px;font-size:13px;line-height:1.6;min-height:100px}
 .compare-box.mine{border-left:3px solid var(--accent)}
@@ -143,7 +144,7 @@ textarea:focus,input:focus{border-color:var(--accent)}
     <div class="card-title">差异备注（可选）</div>
     <textarea id="diffNote" rows="2" placeholder="记录这次对比的收获或疑问…"></textarea>
   </div>
-  <button class="btn btn-primary" onclick="saveRecord()">保存入库 ✓</button>
+  <button class="btn btn-primary" id="saveBtn" onclick="saveRecord()">保存入库 ✓</button>
 </div>
 
 <div class="page" id="page-review">
@@ -234,6 +235,8 @@ async function init(){
 }
 function loadLocalRecords(){try{return JSON.parse(localStorage.getItem(CACHE_KEY)||'[]')}catch{return[]}}
 function saveLocalRecords(){localStorage.setItem(CACHE_KEY,JSON.stringify(records))}
+let _pushTimer=null;
+function schedulePush(){clearTimeout(_pushTimer);_pushTimer=setTimeout(()=>pushToGitHub(),3000)}
 function loadSettings(){
   try{
     const s=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}');
@@ -271,7 +274,10 @@ async function syncFromGitHub(){
     const remote=JSON.parse(atob(data.content.replace(/\n/g,'')));
     const remoteMap={};
     remote.forEach(r=>remoteMap[r.id]=r);
-    records.forEach(r=>{if(!remoteMap[r.id])remoteMap[r.id]=r});
+    records.forEach(r=>{
+      if(!remoteMap[r.id]) remoteMap[r.id]=r;
+      else if((r.updatedAt||r.createdAt)>(remoteMap[r.id].updatedAt||remoteMap[r.id].createdAt)) remoteMap[r.id]=r;
+    });
     records=Object.values(remoteMap).sort((a,b)=>b.createdAt-a.createdAt);
     saveLocalRecords();renderReviewBadge();renderHistory();renderReview();
     setSyncState('ok','已同步');
@@ -343,7 +349,8 @@ function skipTranslate(){
 function startAnalysis(){
   const quote=document.getElementById('inputQuote').value.trim();
   if(!quote){showToast('请先填写用户原话');return}
-  currentDraft={quote,source:currentSource,mySteps:[{},{},{}],aiText:'',diffNote:''};
+  const prevTranslation=currentDraft._translation||'';
+  currentDraft={quote,source:currentSource,mySteps:[{},{},{}],aiText:'',diffNote:'',_translation:prevTranslation};
   analysisStep=0;renderAnalysis();switchTab('analysis');
 }
 
@@ -413,9 +420,11 @@ function renderCompare(){
 }
 
 async function callLLM(){
+  const saveBtn=document.getElementById('saveBtn');
+  if(saveBtn)saveBtn.disabled=true;
   const s=getSettings();
   const key=s.llmKey;
-  if(!key){document.getElementById('aiBox').innerHTML=`<span style="color:var(--text-mute)">未配置 API Key<br>请在「设置」中填入</span>`;return;}
+  if(!key){document.getElementById('aiBox').innerHTML=`<span style="color:var(--text-mute)">未配置 API Key<br>请在「设置」中填入</span>`;if(saveBtn)saveBtn.disabled=false;return;}
   const base=(s.llmBase||'https://api.openai.com/v1').replace(/\/$/,'');
   const model=s.llmModel||'gpt-4o-mini';
   const q=currentDraft.quote;
@@ -430,6 +439,8 @@ async function callLLM(){
     currentDraft._aiResult=text;
   }catch(e){
     document.getElementById('aiBox').innerHTML=`<span style="color:var(--danger)">调用失败：${e.message}</span><br><br><textarea id="aiInput" rows="4" placeholder="可手动粘贴结果…" style="font-size:13px;width:100%"></textarea>`;
+  }finally{
+    if(saveBtn)saveBtn.disabled=false;
   }
 }
 
@@ -437,8 +448,8 @@ function saveRecord(){
   const aiText=currentDraft._aiResult||(document.getElementById('aiInput')?document.getElementById('aiInput').value.trim():'');
   const diffNote=document.getElementById('diffNote').value.trim();
   const now=Date.now();
-  const record={id:'r_'+now,quote:currentDraft.quote,translation:currentDraft._translation||'',source:currentDraft.source,mySteps:currentDraft.mySteps,aiText,diffNote,createdAt:now,reviewSchedule:REVIEW_INTERVALS.map((days,i)=>({round:i+1,dueAt:now+days*86400000,done:false,feeling:null}))};
-  records.unshift(record);saveLocalRecords();pushToGitHub();
+  const record={id:'r_'+now,quote:currentDraft.quote,translation:currentDraft._translation||'',source:currentDraft.source,mySteps:currentDraft.mySteps,aiText,diffNote,createdAt:now,updatedAt:now,reviewSchedule:REVIEW_INTERVALS.map((days,i)=>({round:i+1,dueAt:now+days*86400000,done:false,feeling:null}))};
+  records.unshift(record);saveLocalRecords();schedulePush();
   renderReviewBadge();renderHistory();
   document.getElementById('inputQuote').value='';currentDraft={};
   showToast('已保存入库 ✓');switchTab('input');
@@ -496,7 +507,7 @@ function renderReviewSteps(){
 function toggleRvTag(tag){if(!reviewDraft.tags)reviewDraft.tags=[];reviewDraft.tags=reviewDraft.tags.includes(tag)?reviewDraft.tags.filter(t=>t!==tag):[...reviewDraft.tags,tag];document.querySelectorAll('#rvTagPicker .tag').forEach(el=>el.classList.toggle('active',reviewDraft.tags.includes(el.textContent)))}
 function revealReview(){const s=document.getElementById('rv_surface').value.trim(),m=document.getElementById('rv_motive').value.trim();if(!s||!m){showToast('请填写表层和动机');return}if(!(reviewDraft.tags||[]).length){showToast('请至少选一个标签');return}reviewDraft.surface=s;reviewDraft.motive=m;reviewStage='compare';renderReviewSteps()}
 function selectFeeling(el,val){selectedFeeling=val;document.querySelectorAll('#rvFeeling .tag').forEach(t=>t.classList.remove('active'));el.classList.add('active');document.getElementById('rvDoneBtn').disabled=false}
-function doneReview(){const{record,schedule}=reviewQueue[reviewIdx];const idx=record.reviewSchedule.findIndex(s=>s.round===schedule.round);record.reviewSchedule[idx].done=true;record.reviewSchedule[idx].doneAt=Date.now();record.reviewSchedule[idx].feeling=selectedFeeling;saveLocalRecords();pushToGitHub();showToast('✓ 已完成');reviewIdx++;renderReviewItem()}
+function doneReview(){const{record,schedule}=reviewQueue[reviewIdx];const idx=record.reviewSchedule.findIndex(s=>s.round===schedule.round);record.reviewSchedule[idx].done=true;record.reviewSchedule[idx].doneAt=Date.now();record.reviewSchedule[idx].feeling=selectedFeeling;record.updatedAt=Date.now();saveLocalRecords();schedulePush();showToast('✓ 已完成');reviewIdx++;renderReviewItem()}
 function skipReview(){reviewIdx++;renderReviewItem()}
 
 let historyFilter=null;
@@ -518,10 +529,17 @@ function renderHistory(){
   document.getElementById('historyList').innerHTML=filtered.map(r=>{
     const due=r.reviewSchedule.find(s=>!s.done&&s.dueAt<=Date.now());const allDone=r.reviewSchedule.every(s=>s.done);
     const badge=allDone?`<div class="review-done-badge">已掌握</div>`:due?`<div class="review-badge">待复习</div>`:'';
-    return `<div class="history-item" onclick="showDetail('${r.id}')"><div class="history-meta"><div class="history-date">${fmtDate(r.createdAt)}</div><div class="history-source">${r.source}</div>${badge}</div><div class="history-quote">${escHtml(r.quote.length>80?r.quote.slice(0,80)+'…':r.quote)}</div><div class="history-tags">${(r.mySteps[2].tags||[]).map(t=>`<div class="history-tag">${t}</div>`).join('')}</div></div>`;
+    return `<div class="history-item" onclick="showDetail('${r.id}')"><div class="history-meta"><div class="history-date">${fmtDate(r.createdAt)}</div><div class="history-source">${r.source}</div>${badge}<span onclick="event.stopPropagation();deleteRecord('${r.id}')" style="margin-left:auto;font-size:11px;color:var(--text-mute);cursor:pointer;padding:2px 6px">删除</span></div><div class="history-quote">${escHtml(r.quote.length>80?r.quote.slice(0,80)+'…':r.quote)}</div><div class="history-tags">${(r.mySteps[2].tags||[]).map(t=>`<div class="history-tag">${t}</div>`).join('')}</div></div>`;
   }).join('');
 }
 function setFilter(tag){historyFilter=tag;renderHistory()}
+function deleteRecord(id){
+  if(!confirm('确认删除这条记录？'))return;
+  records=records.filter(r=>r.id!==id);
+  saveLocalRecords();schedulePush();
+  renderHistory();renderReviewBadge();
+  showToast('已删除');
+}
 
 function showDetail(id){
   const r=records.find(x=>x.id===id);if(!r)return;
@@ -543,7 +561,7 @@ function switchTab(name){
 function openModal(id){document.getElementById(id).classList.add('show')}
 function closeModal(id){document.getElementById(id).classList.remove('show')}
 function exportData(){const blob=new Blob([JSON.stringify(records,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`user-insight-${fmtDate(Date.now())}.json`;a.click()}
-function importDataPrompt(){const input=document.createElement('input');input.type='file';input.accept='.json';input.onchange=e=>{const file=e.target.files[0];const reader=new FileReader();reader.onload=ev=>{try{const imported=JSON.parse(ev.target.result);const existIds=new Set(records.map(r=>r.id));imported.forEach(r=>{if(!existIds.has(r.id))records.push(r)});records.sort((a,b)=>b.createdAt-a.createdAt);saveLocalRecords();pushToGitHub();renderReviewBadge();renderHistory();showToast(`导入完成，共 ${imported.length} 条`)}catch{showToast('文件格式有误')}};reader.readAsText(file)};input.click()}
+function importDataPrompt(){const input=document.createElement('input');input.type='file';input.accept='.json';input.onchange=e=>{const file=e.target.files[0];const reader=new FileReader();reader.onload=ev=>{try{const imported=JSON.parse(ev.target.result);const existIds=new Set(records.map(r=>r.id));imported.forEach(r=>{if(!existIds.has(r.id))records.push(r)});records.sort((a,b)=>b.createdAt-a.createdAt);saveLocalRecords();schedulePush();renderReviewBadge();renderHistory();showToast(`导入完成，共 ${imported.length} 条`)}catch{showToast('文件格式有误')}};reader.readAsText(file)};input.click()}
 function showToast(msg,dur=2000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur)}
 function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}
 function fmtDate(ts){const d=new Date(ts);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
