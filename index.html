@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>用户洞察训练工具</title>
 <style>
-:root{--bg:#0f0c09;--surface:#1e1812;--surface2:#28211a;--border:#3d3228;--accent:#e8935a;--accent-dim:#3d2416;--text:#f0e6d8;--text-dim:#a08878;--text-mute:#6a5848;--success:#7ec87a;--warn:#f5c842;--danger:#e8564a;--radius:10px;--radius-sm:6px}
+:root{--bg:#ffffff;--surface:#f7f5f2;--surface2:#ede9e4;--border:#e0d8d0;--accent:#c9693a;--accent-dim:#fce8da;--text:#2a1f17;--text-dim:#8a7060;--text-mute:#bfb0a0;--success:#3a9e6a;--warn:#c9820a;--danger:#c94030;--radius:10px;--radius-sm:6px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',sans-serif;min-height:100vh;padding-bottom:80px}
 .nav{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:52px}
@@ -113,7 +113,18 @@ textarea:focus,input:focus{border-color:var(--accent)}
     <div class="card-title">用户原话</div>
     <textarea id="inputQuote" rows="5" placeholder="粘贴用户说的原话…"></textarea>
   </div>
-  <button class="btn btn-primary" onclick="startAnalysis()">开始分析 →</button>
+  <button class="btn btn-primary" onclick="translateAndPreview()">翻译并开始 →</button>
+  <div id="translateBox" style="display:none;margin-top:14px">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="card-title" style="margin-bottom:0">📖 翻译结果</div>
+        <div id="translateLang" style="font-size:11px;color:var(--text-dim);padding:2px 8px;background:var(--surface2);border-radius:10px"></div>
+      </div>
+      <div id="translateResult" style="font-size:15px;line-height:1.8;color:var(--text);padding:10px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--accent)"></div>
+    </div>
+    <button class="btn btn-primary" onclick="startAnalysis()" style="margin-bottom:10px">确认，开始分析 →</button>
+    <button class="btn btn-secondary" onclick="skipTranslate()">跳过翻译，直接分析</button>
+  </div>
 </div>
 
 <div class="page" id="page-analysis">
@@ -268,6 +279,40 @@ document.getElementById('sourceBtns').addEventListener('click',e=>{
   document.querySelectorAll('.source-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===currentSource));
 });
 
+async function translateAndPreview(){
+  const quote=document.getElementById('inputQuote').value.trim();
+  if(!quote){showToast('请先填写用户原话');return}
+  // 检测是否含阿语或英语（非纯中文则翻译）
+  const hasAr=/[\u0600-\u06FF]/.test(quote);
+  const hasEn=/[a-zA-Z]{3,}/.test(quote);
+  const isChinese=/^[\u4e00-\u9fa5\s\d\p{P}]+$/u.test(quote);
+  if(!hasAr&&!hasEn&&isChinese){
+    // 纯中文，跳过翻译直接分析
+    startAnalysis();return;
+  }
+  const box=document.getElementById('translateBox');
+  const result=document.getElementById('translateResult');
+  const lang=document.getElementById('translateLang');
+  result.textContent='翻译中…';
+  lang.textContent=hasAr?'阿语 → 中文':'英语 → 中文';
+  box.style.display='block';
+  box.scrollIntoView({behavior:'smooth'});
+  try{
+    const url=`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(quote)}`;
+    const res=await fetch(url);
+    const data=await res.json();
+    const translated=data[0].map(s=>s[0]).join('');
+    result.textContent=translated;
+    currentDraft._translation=translated;
+  }catch{
+    result.textContent='翻译失败，请手动理解原文后继续分析';
+    result.style.color='var(--text-dim)';
+  }
+}
+function skipTranslate(){
+  document.getElementById('translateBox').style.display='none';
+  startAnalysis();
+}
 function startAnalysis(){
   const quote=document.getElementById('inputQuote').value.trim();
   if(!quote){showToast('请先填写用户原话');return}
@@ -289,7 +334,7 @@ function renderAnalysis(){
   });
   document.getElementById('stepsBar').innerHTML=html;
   const step=stepConfig[analysisStep];
-  let content=`<div class="card"><div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">用户原话</div><div style="font-size:15px;line-height:1.7;padding:10px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--accent)">${escHtml(currentDraft.quote)}</div></div><div class="card"><div class="card-title">${step.title}</div>`;
+  let content=`<div class="card"><div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">用户原话</div><div style="font-size:15px;line-height:1.7;padding:10px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--accent)">${escHtml(currentDraft.quote)}</div>${currentDraft._translation?`<div style="font-size:13px;color:var(--text-dim);margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:6px">📖 译文：${escHtml(currentDraft._translation)}</div>`:''}</div><div class="card"><div class="card-title">${step.title}</div>`;
   if(step.field==='tags'){
     content+=`<div style="font-size:13px;color:var(--text-dim);margin-bottom:10px">可多选</div><div class="tags" id="tagPicker">`;
     TAGS_LIST.forEach(t=>{const active=(currentDraft.mySteps[2].tags||[]).includes(t)?'active':'';content+=`<div class="tag ${active}" onclick="toggleTag('${t}')">${t}</div>`;});
@@ -343,7 +388,7 @@ function saveRecord(){
   const aiText=document.getElementById('aiInput').value.trim();
   const diffNote=document.getElementById('diffNote').value.trim();
   const now=Date.now();
-  const record={id:'r_'+now,quote:currentDraft.quote,source:currentDraft.source,mySteps:currentDraft.mySteps,aiText,diffNote,createdAt:now,reviewSchedule:REVIEW_INTERVALS.map((days,i)=>({round:i+1,dueAt:now+days*86400000,done:false,feeling:null}))};
+  const record={id:'r_'+now,quote:currentDraft.quote,translation:currentDraft._translation||'',source:currentDraft.source,mySteps:currentDraft.mySteps,aiText,diffNote,createdAt:now,reviewSchedule:REVIEW_INTERVALS.map((days,i)=>({round:i+1,dueAt:now+days*86400000,done:false,feeling:null}))};
   records.unshift(record);saveLocalRecords();pushToGitHub();
   renderReviewBadge();renderHistory();
   document.getElementById('inputQuote').value='';currentDraft={};
@@ -373,7 +418,7 @@ function renderReviewItem(){
   if(reviewIdx>=reviewQueue.length){renderReview();return}
   const{record,schedule}=reviewQueue[reviewIdx];
   reviewStage='thinking';reviewDraft={};selectedFeeling=null;
-  document.getElementById('reviewContent').innerHTML=`<div class="review-header"><div class="review-round">第 ${schedule.round}/${REVIEW_INTERVALS.length} 轮复习 · 距录入 ${Math.round((Date.now()-record.createdAt)/86400000)} 天</div><div class="review-quote">${escHtml(record.quote)}</div><div style="margin-top:8px;font-size:12px;color:var(--text-dim)">来源：${record.source}</div></div><div id="reviewSteps"></div>`;
+  document.getElementById('reviewContent').innerHTML=`<div class="review-header"><div class="review-round">第 ${schedule.round}/${REVIEW_INTERVALS.length} 轮复习 · 距录入 ${Math.round((Date.now()-record.createdAt)/86400000)} 天</div><div class="review-quote">${escHtml(record.quote)}</div>${record.translation?`<div style="font-size:13px;color:var(--text-dim);margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:6px">📖 译文：${escHtml(record.translation)}</div>`:''}<div style="margin-top:8px;font-size:12px;color:var(--text-dim)">来源：${record.source}</div></div><div id="reviewSteps"></div>`;
   renderReviewSteps();
 }
 
