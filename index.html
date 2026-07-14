@@ -194,6 +194,45 @@ textarea:focus,input:focus{border-color:var(--accent)}
     <button class="btn btn-secondary" onclick="exportData()" style="flex:1">导出 JSON</button>
     <button class="btn btn-secondary" onclick="importDataPrompt()" style="flex:1">导入 JSON</button>
   </div>
+  <div class="divider"></div>
+  <div class="section-title">版本记录</div>
+  <div style="font-size:13px;line-height:1.9;color:var(--text-dim);padding-bottom:8px">
+    <div style="margin-bottom:14px">
+      <span style="color:var(--accent);font-weight:600">v1.5</span>&nbsp;<span style="color:var(--text-mute)">2026-07-14</span><br>
+      · GitHub push 加 3秒防抖，避免频繁写入<br>
+      · 多设备 merge 改用 updatedAt 取最新，防止数据覆盖<br>
+      · 修复旧译文残留进新分析的问题<br>
+      · AI 分析期间禁用保存按钮，防止误操作<br>
+      · 手机窄屏对比页改为上下单列布局<br>
+      · 历史库新增删除功能
+    </div>
+    <div style="margin-bottom:14px">
+      <span style="color:var(--text);font-weight:600">v1.4</span>&nbsp;<span style="color:var(--text-mute)">2026-07-14</span><br>
+      · 对比页 AI 判断自动调用 LLM，无需手动粘贴<br>
+      · 设置页新增 API Key / API 地址 / 模型配置<br>
+      · AI 调用失败时提供手动粘贴兜底
+    </div>
+    <div style="margin-bottom:14px">
+      <span style="color:var(--text);font-weight:600">v1.3</span>&nbsp;<span style="color:var(--text-mute)">2026-07-14</span><br>
+      · 背景改为白色暖色系<br>
+      · 新增翻译功能，阿语/英语原话自动翻译为中文<br>
+      · 译文跟随所有分析步骤展示<br>
+      · 来源改为：作品评论 / 问题反馈 / 私信聊天 / 其他
+    </div>
+    <div style="margin-bottom:14px">
+      <span style="color:var(--text);font-weight:600">v1.2</span>&nbsp;<span style="color:var(--text-mute)">2026-07-14</span><br>
+      · 颜色改为暖色系
+    </div>
+    <div>
+      <span style="color:var(--text);font-weight:600">v1.0</span>&nbsp;<span style="color:var(--text-mute)">2026-07-14</span><br>
+      · 首次发布<br>
+      · 三步分析向导（表层 / 动机 / 标签）<br>
+      · 艾宾浩斯记忆曲线复习系统（1/2/4/7/15/30天）<br>
+      · GitHub 双向数据同步 + localStorage 缓存<br>
+      · 历史库 + 动机分布饼图 + 标签筛选<br>
+      · 导出 / 导入 JSON 数据备份
+    </div>
+  </div>
 </div>
 
 <div class="tabs">
