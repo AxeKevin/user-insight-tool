@@ -158,6 +158,22 @@ textarea:focus,input:focus{border-color:var(--accent)}
 </div>
 
 <div class="page" id="page-settings">
+  <div class="section-title">AI 分析设置</div>
+  <div class="card">
+    <div class="card-title">OpenAI API Key</div>
+    <input type="password" id="llmKey" placeholder="sk-xxxxx…">
+    <div style="font-size:12px;color:var(--text-dim);margin-top:6px">支持 OpenAI 兼容接口，Key 只存本地</div>
+  </div>
+  <div class="card">
+    <div class="card-title">API 地址（可选）</div>
+    <input type="text" id="llmBase" placeholder="默认 https://api.openai.com/v1">
+    <div style="font-size:12px;color:var(--text-dim);margin-top:6px">如用代理或第三方接口，填入对应地址</div>
+  </div>
+  <div class="card">
+    <div class="card-title">模型</div>
+    <input type="text" id="llmModel" placeholder="默认 gpt-4o-mini">
+  </div>
+  <div class="divider"></div>
   <div class="section-title">GitHub 同步设置</div>
   <div class="card">
     <div class="card-title">Personal Access Token</div>
@@ -224,10 +240,20 @@ function loadSettings(){
     if(s.token)document.getElementById('ghToken').value=s.token;
     document.getElementById('ghRepo').value=s.repo||'axekevin/user-insight-tool';
     document.getElementById('ghFile').value=s.file||'data/records.json';
+    if(s.llmKey)document.getElementById('llmKey').value=s.llmKey;
+    document.getElementById('llmBase').value=s.llmBase||'';
+    document.getElementById('llmModel').value=s.llmModel||'';
   }catch{}
 }
 function saveSettings(){
-  const s={token:document.getElementById('ghToken').value.trim(),repo:document.getElementById('ghRepo').value.trim(),file:document.getElementById('ghFile').value.trim()};
+  const s={
+    token:document.getElementById('ghToken').value.trim(),
+    repo:document.getElementById('ghRepo').value.trim(),
+    file:document.getElementById('ghFile').value.trim(),
+    llmKey:document.getElementById('llmKey').value.trim(),
+    llmBase:document.getElementById('llmBase').value.trim(),
+    llmModel:document.getElementById('llmModel').value.trim(),
+  };
   localStorage.setItem(SETTINGS_KEY,JSON.stringify(s));
   showToast('设置已保存');
 }
@@ -378,15 +404,37 @@ function analysisNext(){
 }
 
 function renderCompare(){
-  document.getElementById('compareQuoteCard').innerHTML=`<div class="card-title">用户原话</div><div style="font-size:15px;line-height:1.7;border-left:3px solid var(--accent);padding-left:10px">${escHtml(currentDraft.quote)}</div>`;
+  document.getElementById('compareQuoteCard').innerHTML=`<div class="card-title">用户原话</div><div style="font-size:15px;line-height:1.7;border-left:3px solid var(--accent);padding-left:10px">${escHtml(currentDraft.quote)}</div>${currentDraft._translation?`<div style="font-size:13px;color:var(--text-dim);margin-top:8px">📖 译文：${escHtml(currentDraft._translation)}</div>`:''}`;
   const m=currentDraft.mySteps;
   document.getElementById('compareGrid').innerHTML=`
     <div><div class="compare-col-title">🔒 我的判断</div><div class="compare-box mine"><div class="label">表层</div><p>${escHtml(m[0].surface||'')}</p><div class="label">动机</div><p>${escHtml(m[1].motive||'')}</p><div class="label">标签</div><p>${(m[2].tags||[]).map(t=>`<span style="color:var(--accent)">${t}</span>`).join(' ')}</p></div></div>
-    <div><div class="compare-col-title">🤖 AI 判断</div><textarea id="aiInput" rows="9" placeholder="把 AI 分析结果粘贴到这里…" style="height:190px;font-size:13px"></textarea></div>`;
+    <div><div class="compare-col-title">🤖 AI 判断</div><div id="aiBox" class="compare-box ai" style="font-size:13px;min-height:190px;line-height:1.7"><span style="color:var(--text-mute)">AI 分析中…</span></div></div>`;
+  callLLM();
+}
+
+async function callLLM(){
+  const s=getSettings();
+  const key=s.llmKey;
+  if(!key){document.getElementById('aiBox').innerHTML=`<span style="color:var(--text-mute)">未配置 API Key<br>请在「设置」中填入</span>`;return;}
+  const base=(s.llmBase||'https://api.openai.com/v1').replace(/\/$/,'');
+  const model=s.llmModel||'gpt-4o-mini';
+  const q=currentDraft.quote;
+  const tr=currentDraft._translation?`\n中文译文：${currentDraft._translation}`:'';
+  const prompt=`你是一位专注于用户洞察的分析师，熟悉中东用户的社交和消费心理。\n\n请分析以下用户原话背后的动机：\n\n用户原话：${q}${tr}\n\n请从三个维度分析，格式如下：\n【表层】这句话字面上在说什么（1-2句）\n【动机】他为什么这么说，背后的真实需求或情绪是什么\n【标签】从以下选项中选择最匹配的（可多选）：炫耀/身份感、关系维护、归属感、仪式感、娱乐/消磨、其他\n\n要求：分析简洁有力，直指本质，不要泛泛而谈。`;
+  try{
+    const res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:JSON.stringify({model,messages:[{role:'user',content:prompt}],max_tokens:400,temperature:0.7})});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const data=await res.json();
+    const text=data.choices?.[0]?.message?.content||'';
+    document.getElementById('aiBox').innerHTML=escHtml(text).replace(/【(.*?)】/g,'<strong style="color:var(--accent)">【$1】</strong>');
+    currentDraft._aiResult=text;
+  }catch(e){
+    document.getElementById('aiBox').innerHTML=`<span style="color:var(--danger)">调用失败：${e.message}</span><br><br><textarea id="aiInput" rows="4" placeholder="可手动粘贴结果…" style="font-size:13px;width:100%"></textarea>`;
+  }
 }
 
 function saveRecord(){
-  const aiText=document.getElementById('aiInput').value.trim();
+  const aiText=currentDraft._aiResult||(document.getElementById('aiInput')?document.getElementById('aiInput').value.trim():'');
   const diffNote=document.getElementById('diffNote').value.trim();
   const now=Date.now();
   const record={id:'r_'+now,quote:currentDraft.quote,translation:currentDraft._translation||'',source:currentDraft.source,mySteps:currentDraft.mySteps,aiText,diffNote,createdAt:now,reviewSchedule:REVIEW_INTERVALS.map((days,i)=>({round:i+1,dueAt:now+days*86400000,done:false,feeling:null}))};
